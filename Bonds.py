@@ -70,7 +70,23 @@ def cal_matrix_num(tmp_df):
 st.write("Bond Analysis")
 
 # bonddata = pd.read_csv(r'E:\Mengqi\CDS\DAS\DAS\Analysis\Domestic bond\bonddata.csv')
-bonddata = pd.read_csv(r'bonddata.csv')
+# bonddata = pd.read_csv(r'bonddata.csv')
+
+bonddata = pd.DataFrame()
+
+for i in range(11):
+    print(i)
+    tmp = pd.read_csv('bonddata{}.csv'.format(i))
+    bonddata = pd.concat([bonddata, tmp], axis = 0)
+bonddata = bonddata.reset_index(drop = True)
+# for i in range(10):
+#     print(i)
+#     a = 250000*i
+#     b = 250000*(i+1)
+#     bonddata.iloc[a:b, :].to_csv(r'E:\Mengqi\Streamlit\bonds_analysis\bonddata{}.csv'.format(i), index = False)
+
+# bonddata.iloc[2500000:, :].to_csv(r'E:\Mengqi\Streamlit\bonds_analysis\bonddata{}.csv'.format(10), index = False)
+
 print(bonddata.columns)
 bonddata["YYYYMMDD"] = pd.to_datetime(bonddata["YYYYMMDD"])
 bonddata_bk = bonddata.copy(deep = True)
