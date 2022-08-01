@@ -6,6 +6,8 @@ from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 from dateutil import relativedelta
 import gc
+import math
+import seaborn as sns
 #streamlit run E:\Mengqi\Streamlit\Bonds.py
 #streamlit run E:\Mengqi\Streamlit\Bonds.py
 
@@ -147,6 +149,13 @@ def generate_result(col, bonddata, imonth, itype, Fix_Type, sort_dict):
     tmp1 = tmp.loc[~tmp.multiValuation1, itype + ['bondID','yearmonth', f'{imonth}M_later', 'valEndDate', 'Rating1', 'PDiR1', 'Flag', col]].merge(tmp.loc[~tmp.multiValuation1,['bondID', 'yearmonth', 'Rating1', 'PDiR1', 'Flag']].rename(columns = {'yearmonth':f'{imonth}M_later'}), on = ['bondID', f'{imonth}M_later'], how = 'inner')
     tmp2 = tmp.loc[tmp.multiValuation1, itype + [ 'bondID','yearmonth', f'{imonth}M_later', 'valEndDate', 'Rating1', 'PDiR1' , 'Flag', col]].merge(tmp.loc[tmp.multiValuation1,['bondID', 'yearmonth', 'valEndDate', 'Rating1', 'PDiR1', 'Flag']].rename(columns = {'yearmonth':f'{imonth}M_later'}), on = ['bondID', f'{imonth}M_later', 'valEndDate'], how = 'inner')
     tmp = pd.concat([tmp1, tmp2], axis = 0)
+    if 'Rating&PDiR' not in Fix_Type:
+        tmp = tmp[tmp.Rating1_x.isin(['A_andBetter', 'BBB', 'BB', 'B_andWorse'])]
+        tmp = tmp[tmp.PDiR1_x.isin(['A_andBetter', 'BBB', 'BB', 'B_andWorse'])]
+    if 'Rating' not in Fix_Type:
+        tmp = tmp[tmp.Rating1_x.isin(['A_andBetter', 'BBB', 'BB', 'B_andWorse'])]
+    if 'PDiR' not in Fix_Type:
+        tmp = tmp[tmp.PDiR1_x.isin(['A_andBetter', 'BBB', 'BB', 'B_andWorse'])]
 
     df = tmp.groupby(itype).apply(lambda x: generate_type_matrix(x, Fix_Type, col)).reset_index()
     df = df.merge(num_orig, on = itype + ['Type'], how = 'left')
@@ -170,8 +179,8 @@ def generate_result(col, bonddata, imonth, itype, Fix_Type, sort_dict):
     st.dataframe(df)
     gc.collect()
 
-def generate_stat(col, bonddata, itype, sort_dict):
-    pd.set_option('display.float_format', '{:.2g}'.format)
+def generate_stat(col, bonddata, itype, sort_dict, total_num):
+    # pd.set_option('display.float_format', '{:.2g}'.format)
     print(itype)
     tmp_df = bonddata[[f'{col}', 'CompanyID', 'bondID']+itype].groupby(itype).agg({f'{col}': ['min', q1, q5, q10, q25, q50, q75, q90, q95, q99, 'max', 'mean', 'std'], 'CompanyID': ['nunique'],
     'bondID': ['nunique', 'count']}).reset_index()
@@ -187,7 +196,7 @@ def generate_stat(col, bonddata, itype, sort_dict):
     # tmp_df.loc[tmp_df.isDomestic_==1, 'isDomestic_'] = 
     # tmp_df = pd.read_csv(r'E:\Mengqi\CDS\DAS\DAS\Analysis\Domestic bond\tmp_df.csv')
     # tmp_df.to_csv(r'E:\Mengqi\CDS\DAS\DAS\Analysis\Domestic bond\tmp_df_fill.csv', index = False)
-    tmp_df['%Obs(byAll)'] =  (tmp_df['bondID_count']/bonddata.shape[0]).apply(lambda x: "{rate:.1f}%".format(rate = x*100))
+    tmp_df['%Obs(byAll)'] =  (tmp_df['bondID_count']/total_num).apply(lambda x: "{rate:.1f}%".format(rate = x*100))
     tmp_df = tmp_df.rename(columns = { 'CompanyID_nunique':'#Firm','bondID_nunique':'#Bond', 'bondID_count': '#Obs'})
 
     index = []
@@ -203,9 +212,53 @@ def generate_stat(col, bonddata, itype, sort_dict):
     
     tmp_df = tmp_df.sort_values(index + ['All'])
 
-    tmp_df = tmp_df.drop(index + ['All'], axis = 1)
-    st.dataframe(tmp_df.reset_index(drop = True).style.highlight_max(axis=0))
+    tmp_df = tmp_df.drop(index + ['All'], axis = 1).reset_index(drop = True)
+    # st.dataframe(tmp_df.style.highlight_max(axis=0))'
+    for icol in  [f'{col}_q1', f'{col}_q5', f'{col}_q10', f'{col}_q25', f'{col}_q50', f'{col}_q75', f'{col}_q90', f'{col}_q95', f'{col}_q99', f'{col}_min', f'{col}_max', f'{col}_mean']:
+        tmp_df.loc[:,icol] = (tmp_df.loc[:, icol]*100)
+        tmp_df = tmp_df.rename(columns = {icol: icol+'(%)'})
+    
+    # st.dataframe(tmp_df.style.format('{:.3f}', na_rep="", subset = [f'{col}_q1'])\
+    #      .bar(align=0, vmin=-2.5, vmax=2.5, cmap="bwr", height=50,
+    #           width=60, props="width: 120px; border-right: 1px solid black;")\
+    #      .text_gradient(cmap="bwr", vmin=-2.5, vmax=2.5))
+    # st.dataframe(tmp_df.style.bar( color='#d65f5f'))
+    # AgGrid(tmp_df)
+    # df2 = pd.DataFrame(np.random.randn(10,4), columns=['A','B','C','D'])
+    cm = sns.light_palette((260, 75, 60), input="husl", as_cmap=True)
+
+    st.dataframe(tmp_df.style.background_gradient(subset = [f'{col}_q1(%)', f'{col}_q5(%)', f'{col}_q10(%)', f'{col}_q25(%)', f'{col}_q50(%)', f'{col}_q75(%)', f'{col}_q90(%)', f'{col}_q95(%)', f'{col}_q99(%)'], cmap=cm)\
+        .format('{:.2f}', na_rep="", subset = [f'{col}_q1(%)', f'{col}_q5(%)', f'{col}_q10(%)', f'{col}_q25(%)', f'{col}_q50(%)', f'{col}_q75(%)', f'{col}_q90(%)', f'{col}_q95(%)', f'{col}_q99(%)', 
+        f'{col}_min(%)', f'{col}_max(%)', f'{col}_mean(%)', f'{col}_std']))
     gc.collect()
+
+def generate_plot(bonddata, col, itype):
+    if len(itype)>1:
+        itype.remove("All")
+    groups = bonddata[[f'{col}', 'CompanyID', 'bondID']+itype].groupby(itype)
+    rowlength = math.ceil(groups.ngroups/5)
+    fig = make_subplots(rows = rowlength , cols = 5)
+    icol = 1
+    irow = 1
+    for key in groups.groups.keys():
+        print(key, icol, irow)
+        tmp = groups.get_group(key)
+        print(tmp)
+        if len(itype)>1:
+            fig.add_trace(go.Box(y = tmp['Yield'], name = '_'.join(key)), row = irow, col = icol)
+        else:
+            fig.add_trace(go.Box(y = tmp['Yield'], name = key), row = irow, col = icol)
+        if icol==5:
+            irow = irow + 1
+            icol = 0
+        icol = icol + 1
+
+    fig.update_layout(title = 'Boxplot for {}'.format(col))
+    fig.update_yaxes(title_text = col)
+    fig.update_layout(showlegend=False)
+    st.plotly_chart(fig, use_container_width=True)
+    # fig.write_html(r'E:\Mengqi\CDS\DAS\DAS\Analysis\P3_{}.html'.format('type'), auto_open = True)
+
     
 @st.cache
 def get_bonddata():
@@ -258,7 +311,7 @@ if col == 'ZS':
 imonth = st.sidebar.selectbox('Choose the Month',options = [3,6,12]) 
 # imonth = imonth[0]
 # Model = st.sidebar.multiselect('Choose the Model',options = list(bonddata['Model'].unique())+['All'], default=['All'])
-Model = st.sidebar.multiselect('Choose the Period',options = ['CORP', 'LGFV', 'FINA', 'N/A', 'All'], default=['All'])
+Model = st.sidebar.multiselect('Choose the Model',options = ['CORP', 'LGFV', 'FINA', 'N/A', 'All'], default=['All'])
 Period = st.sidebar.multiselect('Choose the Period',options = ['Before2018', 'After2018', 'All'], default=['All'])
 isDomestic = st.sidebar.multiselect('Choose the isDomestic',options = ['Domestic', 'NonDomestic','All'], default=['All'])
 OptionType = st.sidebar.multiselect('Choose the OptionType',options = ['Vanilla', 'Others', 'Puttable', 'Callable', 'Callable&Puttable', 'All'], default=['All'])
@@ -274,11 +327,13 @@ valEndDate = st.sidebar.multiselect('Choose the valEndDate>Maturity',options = [
 Fix_Type = st.sidebar.multiselect('Choose the Fix_Type',options = ['Rating&PDiR', 'Rating', 'PDiR', 'All'], default=['Rating&PDiR'])
 
 bonddata = get_bonddata()
+total_num = bonddata.shape[0]
 if run:
     print(bonddata.columns)
     itype, bonddata, sort_dict = generate_type(bonddata, Model, Period, isDomestic, OptionType, Rating, PDiR, TimeToMaturity, CouponChg, Is_Public_Issued, multiValuation, valEndDate)
     generate_result(col, bonddata, imonth, itype, Fix_Type, sort_dict)
-    generate_stat(col, bonddata, itype, sort_dict)
+    generate_stat(col, bonddata, itype, sort_dict, total_num)
+    # generate_plot(bonddata, col, itype)
 
 
 
