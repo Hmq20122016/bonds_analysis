@@ -37,20 +37,20 @@ def q99(x):
 def count_comp(x):
     return x.nunique()
 
-def generate_type_matrix(tmp_df, Fix_Type):
+def generate_type_matrix(tmp_df, Fix_Type, col):
     df_all = pd.DataFrame()
     for iType in Fix_Type:
         if iType == 'Rating&PDiR':
-            df = cal_matrix_num(tmp_df[(tmp_df.Rating1_x == tmp_df.Rating1_y)&(tmp_df.PDiR1_x == tmp_df.PDiR1_y)])
+            df = cal_matrix_num(tmp_df[(tmp_df.Rating1_x == tmp_df.Rating1_y)&(tmp_df.PDiR1_x == tmp_df.PDiR1_y)], col)
             df['Fix_Type'] = 'Rating&PDiR'
         elif iType == 'Rating':
-            df = cal_matrix_num(tmp_df[(tmp_df.Rating1_x == tmp_df.Rating1_y)])
+            df = cal_matrix_num(tmp_df[(tmp_df.Rating1_x == tmp_df.Rating1_y)], col)
             df['Fix_Type'] = 'Rating'
         elif iType == 'PDiR':
-            df = cal_matrix_num(tmp_df[(tmp_df.PDiR1_x == tmp_df.PDiR1_y)])
+            df = cal_matrix_num(tmp_df[(tmp_df.PDiR1_x == tmp_df.PDiR1_y)], col)
             df['Fix_Type'] = 'PDiR'
         elif iType == 'All':
-            df = cal_matrix_num(tmp_df)
+            df = cal_matrix_num(tmp_df, col)
             df['Fix_Type'] = 'All'
         df_all = pd.concat([df_all, df], axis = 0)
     df_all = df_all.set_index(['Fix_Type', 'Type'])
@@ -58,7 +58,7 @@ def generate_type_matrix(tmp_df, Fix_Type):
         
         
 
-def cal_matrix_num(tmp_df):
+def cal_matrix_num(tmp_df, col):
     total_num = tmp_df.shape[0]
     df = pd.DataFrame(columns = ['<Q25 (obs, std)', 'Q25_Q50 (obs, std)', 'Q50_Q75 (obs, std)', '>Q75 (obs, std)', 'Sum_obs'])
     df['Type'] = ['<Q25', 'Q25_Q50', 'Q50_Q75', '>Q75']
@@ -67,61 +67,74 @@ def cal_matrix_num(tmp_df):
         for j in range(4):
             aa = tmp_df[(tmp_df.Flag_x==i)&(tmp_df.Flag_y==j)]
             num_obs = num_obs + aa.shape[0]
-            df.iloc[i,j] = "{rate:.1f}% ({num:.0f}, {std:.4f})".format(rate = remove_0(aa.shape[0]*100, total_num), num = aa.shape[0], std = aa.Yield.std())
+            df.iloc[i,j] = "{rate:.1f}% ({num:.0f}, {std:.4f})".format(rate = remove_0(aa.shape[0]*100, total_num), num = aa.shape[0], std = aa[col].std())
         df.iloc[i,4] = num_obs
     return df
 
-def generate_result(bonddata, imonth, Model, Period, isDomestic, OptionType, Rating, PDiR, TimeToMaturity, CouponChg, Is_Public_Issued, multiValuation, valEndDate, Fix_Type):
-
+def generate_type(bonddata, Model, Period, isDomestic, OptionType, Rating, PDiR, TimeToMaturity, CouponChg, Is_Public_Issued, multiValuation, valEndDate):
     itype = ['All']
+    sort_dict = {}
     if 'All' not in Model:
         bonddata = bonddata[bonddata['Model'].isin(Model)]
         itype.append("Model")
+        sort_dict["Model"] = Model
     if 'All' not in Period:
         bonddata = bonddata[bonddata['Period'].isin(Period)]
         itype.append("Period")
+        sort_dict["Period"] = Period
     if 'All' not in isDomestic:
         bonddata = bonddata[bonddata['isDomestic'].isin(isDomestic)]
         itype.append("isDomestic")
+        sort_dict["isDomestic"] = isDomestic
     if 'All' not in OptionType:
         bonddata = bonddata[bonddata['OptionType'].isin(OptionType)]
         itype.append("OptionType")
+        sort_dict["OptionType"] = OptionType
     if 'All' not in Rating:
         bonddata = bonddata[bonddata['Rating'].isin(Rating)]
         itype.append("Rating")
+        sort_dict["Rating"] = Rating
     if 'All' not in PDiR:
         bonddata = bonddata[bonddata['PDiR'].isin(PDiR)]
         itype.append("PDiR")
+        sort_dict["PDiR"] = PDiR
     if 'All' not in TimeToMaturity:
         bonddata = bonddata[bonddata['TimeToMaturity'].isin(TimeToMaturity)]
         itype.append("TimeToMaturity")
+        sort_dict["TimeToMaturity"] = TimeToMaturity
     if 'All' not in CouponChg:
         bonddata = bonddata[bonddata['CouponChg'].isin(CouponChg)]
         itype.append("CouponChg")
+        sort_dict["CouponChg"] = CouponChg
     if 'All' not in Is_Public_Issued:
         bonddata = bonddata[bonddata['Is_Public_Issued'].isin(Is_Public_Issued)]
         itype.append("Is_Public_Issued")
+        sort_dict["Is_Public_Issued"] = Is_Public_Issued
     if 'All' not in multiValuation:
         bonddata = bonddata[bonddata['multiValuation'].isin(multiValuation)]
         itype.append("multiValuation")
+        sort_dict["multiValuation"] = multiValuation
     if 'All' not in valEndDate:
         bonddata = bonddata[bonddata['valEndDate>Maturity'].isin(valEndDate)]
         itype.append("valEndDate>Maturity")
+        sort_dict["valEndDate>Maturity"] = valEndDate
+    return itype, bonddata, sort_dict
 
-    col = 'Yield'
+def generate_result(col, bonddata, imonth, itype, Fix_Type, sort_dict):
+
     cut_b = bonddata.groupby(itype + ['yearmonth']).agg({f'{col}': [q25, q50, q75]}).reset_index()
     cut_b.columns = [''.join(col) for col in cut_b.columns]
 
-    tmp = bonddata[itype + ['yearmonth', 'Yield', 'bondID', 'YYYYMMDD', 'valEndDate']].merge(cut_b, on = itype + ['yearmonth'], how = 'left')
+    tmp = bonddata[itype + ['yearmonth', col, 'bondID', 'YYYYMMDD', 'valEndDate']].merge(cut_b, on = itype + ['yearmonth'], how = 'left')
     cut_b = []
-    tmp['Q25'] = tmp['Yield'] - tmp['Yieldq25']
-    tmp['Q50'] = tmp['Yield'] - tmp['Yieldq50']
-    tmp['Q75'] = tmp['Yield'] - tmp['Yieldq75']
+    tmp['Q25'] = tmp[col] - tmp[f'{col}q25']
+    tmp['Q50'] = tmp[col] - tmp[f'{col}q50']
+    tmp['Q75'] = tmp[col] - tmp[f'{col}q75']
 
     tmp['Flag'] = (tmp[['Q25', 'Q50', 'Q75']]>0).sum(axis = 1)
-    tmp = tmp[itype + ['yearmonth', 'Flag', 'bondID', 'YYYYMMDD','valEndDate', 'Yield']]
+    tmp = tmp[itype + ['yearmonth', 'Flag', 'bondID', 'YYYYMMDD','valEndDate', col]]
     # tmp = tmp.merge(bonddata[itype+ ['bondID','YYYYMMDD', 'valEndDate']], how = 'left', on = ['bondID','YYYYMMDD', 'valEndDate']+itype)
-    num_orig = tmp[itype + ['Yield', 'Flag']].groupby(itype + ['Flag']).count().reset_index().rename(columns = {'Yield': 'Original_Obs', 'Flag':'Type'})
+    num_orig = tmp[itype + [col, 'Flag']].groupby(itype + ['Flag']).count().reset_index().rename(columns = {col: 'Original_obs', 'Flag':'Type'})
     num_orig.loc[num_orig['Type']==0, 'Type'] = '<Q25'
     num_orig.loc[num_orig['Type']==1, 'Type'] = 'Q25_Q50'
     num_orig.loc[num_orig['Type']==2, 'Type'] = 'Q50_Q75'
@@ -131,17 +144,69 @@ def generate_result(bonddata, imonth, Model, Period, isDomestic, OptionType, Rat
     tmp = tmp.merge(bonddata[['multiValuation', 'bondID','YYYYMMDD',f'{imonth}M_later', 'valEndDate', 'Rating', 'PDiR']].rename(columns = {'Rating':'Rating1', 'PDiR':'PDiR1', 'multiValuation': 'multiValuation1'}), how = 'left', on = ['bondID','YYYYMMDD', 'valEndDate'])
 
 
-    tmp1 = tmp.loc[~tmp.multiValuation1, itype + ['bondID','yearmonth', f'{imonth}M_later', 'valEndDate', 'Rating1', 'PDiR1', 'Flag', 'Yield']].merge(tmp.loc[~tmp.multiValuation1,['bondID', 'yearmonth', 'Rating1', 'PDiR1', 'Flag']].rename(columns = {'yearmonth':f'{imonth}M_later'}), on = ['bondID', f'{imonth}M_later'], how = 'inner')
-    tmp2 = tmp.loc[tmp.multiValuation1, itype + [ 'bondID','yearmonth', f'{imonth}M_later', 'valEndDate', 'Rating1', 'PDiR1' , 'Flag', 'Yield']].merge(tmp.loc[tmp.multiValuation1,['bondID', 'yearmonth', 'valEndDate', 'Rating1', 'PDiR1', 'Flag']].rename(columns = {'yearmonth':f'{imonth}M_later'}), on = ['bondID', f'{imonth}M_later', 'valEndDate'], how = 'inner')
+    tmp1 = tmp.loc[~tmp.multiValuation1, itype + ['bondID','yearmonth', f'{imonth}M_later', 'valEndDate', 'Rating1', 'PDiR1', 'Flag', col]].merge(tmp.loc[~tmp.multiValuation1,['bondID', 'yearmonth', 'Rating1', 'PDiR1', 'Flag']].rename(columns = {'yearmonth':f'{imonth}M_later'}), on = ['bondID', f'{imonth}M_later'], how = 'inner')
+    tmp2 = tmp.loc[tmp.multiValuation1, itype + [ 'bondID','yearmonth', f'{imonth}M_later', 'valEndDate', 'Rating1', 'PDiR1' , 'Flag', col]].merge(tmp.loc[tmp.multiValuation1,['bondID', 'yearmonth', 'valEndDate', 'Rating1', 'PDiR1', 'Flag']].rename(columns = {'yearmonth':f'{imonth}M_later'}), on = ['bondID', f'{imonth}M_later', 'valEndDate'], how = 'inner')
     tmp = pd.concat([tmp1, tmp2], axis = 0)
 
-    df = tmp.groupby(itype).apply(lambda x: generate_type_matrix(x, Fix_Type)).reset_index()
+    df = tmp.groupby(itype).apply(lambda x: generate_type_matrix(x, Fix_Type, col)).reset_index()
     df = df.merge(num_orig, on = itype + ['Type'], how = 'left')
 
+    index = []
+    for ikey in sort_dict.keys():
+        tmp = {}
+        i = 0
+        for ivalues in sort_dict[ikey]:
+            tmp[ivalues] = i
+            i = i + 1
+        print(tmp)
+        df[f'index_{ikey}'] = df[ikey].apply(lambda x: tmp[x])
+        index.append(f'index_{ikey}')
 
+    tmp = {'<Q25':0, 'Q25_Q50':1, 'Q50_Q75':2, '>Q75':3}
+    df['index_sort1'] = df['Type'].apply(lambda x: tmp[x])
+    df = df.sort_values(index + ['index_sort1'])
+    df = df.drop(index + ['index_sort1', 'All'], axis = 1).reset_index(drop = True)
+    df['Sum_obs/ori_obs(%)'] = (df['Sum_obs']/ df['Original_obs']).apply(lambda x: '{rate:.2f}%'.format(rate = x*100))
     st.dataframe(df)
     gc.collect()
 
+def generate_stat(col, bonddata, itype, sort_dict):
+    pd.set_option('display.float_format', '{:.2g}'.format)
+    print(itype)
+    tmp_df = bonddata[[f'{col}', 'CompanyID', 'bondID']+itype].groupby(itype).agg({f'{col}': ['min', q1, q5, q10, q25, q50, q75, q90, q95, q99, 'max', 'mean', 'std'], 'CompanyID': ['nunique'],
+    'bondID': ['nunique', 'count']}).reset_index()
+    tmp_df.columns = ['_'.join(col) for col in tmp_df.columns]
+    # tmp_df.to_csv(r'E:\Mengqi\CDS\DAS\DAS\Analysis\Domestic bond\tmp_df.csv', index = False)
+    # tmp_df = pd.read_csv(r'E:\Mengqi\CDS\DAS\DAS\Analysis\Domestic bond\tmp_df.csv')
+    for i in itype:
+        if i + '_' in tmp_df.columns:
+            tmp_df = tmp_df.rename(columns = {i + '_':i})
+    tmp_df[itype] = tmp_df[itype].fillna('All')
+    
+    print(tmp_df)
+    # tmp_df.loc[tmp_df.isDomestic_==1, 'isDomestic_'] = 
+    # tmp_df = pd.read_csv(r'E:\Mengqi\CDS\DAS\DAS\Analysis\Domestic bond\tmp_df.csv')
+    # tmp_df.to_csv(r'E:\Mengqi\CDS\DAS\DAS\Analysis\Domestic bond\tmp_df_fill.csv', index = False)
+    tmp_df['%Obs(byAll)'] =  (tmp_df['bondID_count']/bonddata.shape[0]).apply(lambda x: "{rate:.1f}%".format(rate = x*100))
+    tmp_df = tmp_df.rename(columns = { 'CompanyID_nunique':'#Firm','bondID_nunique':'#Bond', 'bondID_count': '#Obs'})
+
+    index = []
+    for ikey in sort_dict.keys():
+        tmp = {}
+        i = 0
+        for ivalues in sort_dict[ikey]:
+            tmp[ivalues] = i
+            i = i + 1
+        print(tmp)
+        tmp_df[f'index_{ikey}'] = tmp_df[ikey].apply(lambda x: tmp[x])
+        index.append(f'index_{ikey}')
+    
+    tmp_df = tmp_df.sort_values(index + ['All'])
+
+    tmp_df = tmp_df.drop(index + ['All'], axis = 1)
+    st.dataframe(tmp_df.reset_index(drop = True).style.highlight_max(axis=0))
+    gc.collect()
+    
 @st.cache
 def get_bonddata():
     bonddata = pd.DataFrame()
@@ -183,30 +248,37 @@ st.write("Bond Analysis")
 # df['Model'] = ['LGFV', 'CORP','LGFV', 'CORP','LGFV', 'CORP']
 # df['Type'] = ['1', '2','3', '3','4', '1']
 # df['Yield'] = [1,2,3,4,5,6]
+
+
 st.sidebar.title("Please select the category")
-imonth = st.sidebar.multiselect('choose the Month',options = [3,6,12], default=[3]) 
-imonth = imonth[0]
-# Model = st.sidebar.multiselect('choose the Model',options = list(bonddata['Model'].unique())+['All'], default=['All'])
-Model = st.sidebar.multiselect('choose the Period',options = ['CORP', 'LGFV', 'FINA', 'N/A', 'All'], default=['All'])
-Period = st.sidebar.multiselect('choose the Period',options = ['Before2018', 'After2018', 'All'], default=['All'])
-isDomestic = st.sidebar.multiselect('choose the isDomestic',options = ['Domestic', 'NonDomestic','All'], default=['All'])
-OptionType = st.sidebar.multiselect('choose the OptionType',options = ['Vanilla', 'Others', 'Puttable', 'Callable', 'Callable&Puttable', 'All'], default=['All'])
-Rating = st.sidebar.multiselect('choose the Rating',options = ['A_andBetter', 'N/A', 'BBB', 'B_andWorse', 'BB', 'All'], default=['All'])
-PDiR = st.sidebar.multiselect('choose the PDiR',options = ['A_andBetter', 'BBB', 'BB', 'B_andWorse', 'N/A', 'All'], default=['All'])
-TimeToMaturity = st.sidebar.multiselect('choose the TimeToMaturity',options = ['4To12M', 'LessThan3M', '1-3Y', '3-5Y', 'MoreThan5Y', 'N/A', 'All'], default=['All'])
+run = st.sidebar.button('Click and Run')
+col = st.sidebar.radio('Choose the values',options = ['Yield', 'GS', 'ZS'])
+if col == 'ZS':
+    col = 'Spread'
+imonth = st.sidebar.selectbox('Choose the Month',options = [3,6,12]) 
+# imonth = imonth[0]
+# Model = st.sidebar.multiselect('Choose the Model',options = list(bonddata['Model'].unique())+['All'], default=['All'])
+Model = st.sidebar.multiselect('Choose the Period',options = ['CORP', 'LGFV', 'FINA', 'N/A', 'All'], default=['All'])
+Period = st.sidebar.multiselect('Choose the Period',options = ['Before2018', 'After2018', 'All'], default=['All'])
+isDomestic = st.sidebar.multiselect('Choose the isDomestic',options = ['Domestic', 'NonDomestic','All'], default=['All'])
+OptionType = st.sidebar.multiselect('Choose the OptionType',options = ['Vanilla', 'Others', 'Puttable', 'Callable', 'Callable&Puttable', 'All'], default=['All'])
+Rating = st.sidebar.multiselect('Choose the Rating',options = ['A_andBetter', 'N/A', 'BBB', 'B_andWorse', 'BB', 'All'], default=['All'])
+PDiR = st.sidebar.multiselect('Choose the PDiR',options = ['A_andBetter', 'BBB', 'BB', 'B_andWorse', 'N/A', 'All'], default=['All'])
+TimeToMaturity = st.sidebar.multiselect('Choose the TimeToMaturity',options = ['4To12M', 'LessThan3M', '1-3Y', '3-5Y', 'MoreThan5Y', 'N/A', 'All'], default=['All'])
 
-CouponChg = st.sidebar.multiselect('choose the CouponChg',options = ['N/A', 'Change', 'All'], default=['All'])
-Is_Public_Issued = st.sidebar.multiselect('choose the Is_Public_Issued',options = [True, False, 'All'], default=['All'])
-multiValuation = st.sidebar.multiselect('choose the multiValuation',options = [False, True, 'All'], default=['All'])
-valEndDate = st.sidebar.multiselect('choose the valEndDate>Maturity',options = [False, True, 'All'], default=['All'])
+CouponChg = st.sidebar.multiselect('Choose the CouponChg',options = ['N/A', 'Change', 'All'], default=['All'])
+Is_Public_Issued = st.sidebar.multiselect('Choose the Is_Public_Issued',options = [True, False, 'All'], default=['All'])
+multiValuation = st.sidebar.multiselect('Choose the multiValuation',options = [False, True, 'All'], default=['All'])
+valEndDate = st.sidebar.multiselect('Choose the valEndDate>Maturity',options = [False, True, 'All'], default=['All'])
 
-Fix_Type = st.sidebar.multiselect('choose the Fix_Type',options = ['Rating&PDiR', 'Rating', 'PDiR', 'All'], default=['Rating&PDiR'])
-run = st.sidebar.button('Run')
+Fix_Type = st.sidebar.multiselect('Choose the Fix_Type',options = ['Rating&PDiR', 'Rating', 'PDiR', 'All'], default=['Rating&PDiR'])
+
 bonddata = get_bonddata()
 if run:
     print(bonddata.columns)
-    generate_result(bonddata, imonth, Model, Period, isDomestic, OptionType, Rating, PDiR, TimeToMaturity, CouponChg, Is_Public_Issued, multiValuation, valEndDate, Fix_Type)
-
+    itype, bonddata, sort_dict = generate_type(bonddata, Model, Period, isDomestic, OptionType, Rating, PDiR, TimeToMaturity, CouponChg, Is_Public_Issued, multiValuation, valEndDate)
+    generate_result(col, bonddata, imonth, itype, Fix_Type, sort_dict)
+    generate_stat(col, bonddata, itype, sort_dict)
 
 
 
