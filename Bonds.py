@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 from dateutil import relativedelta
 import gc
 #streamlit run E:\Mengqi\Streamlit\Bonds.py
-
+#streamlit run E:\Mengqi\Streamlit\Bonds.py
 
 
 def remove_0(x, y):
@@ -60,15 +60,18 @@ def generate_type_matrix(tmp_df, Fix_Type):
 
 def cal_matrix_num(tmp_df):
     total_num = tmp_df.shape[0]
-    df = pd.DataFrame(columns = ['<Q25', 'Q25_Q50', 'Q50_Q75', '>Q75'])
+    df = pd.DataFrame(columns = ['<Q25 (obs, std)', 'Q25_Q50 (obs, std)', 'Q50_Q75 (obs, std)', '>Q75 (obs, std)', 'Sum_obs'])
     df['Type'] = ['<Q25', 'Q25_Q50', 'Q50_Q75', '>Q75']
     for i in range(4):
+        num_obs = 0
         for j in range(4):
             aa = tmp_df[(tmp_df.Flag_x==i)&(tmp_df.Flag_y==j)]
+            num_obs = num_obs + aa.shape[0]
             df.iloc[i,j] = "{rate:.1f}% ({num:.0f}, {std:.4f})".format(rate = remove_0(aa.shape[0]*100, total_num), num = aa.shape[0], std = aa.Yield.std())
+        df.iloc[i,4] = num_obs
     return df
 
-def generate_result(bonddata, Model, Period, isDomestic, OptionType, Rating, PDiR, TimeToMaturity, CouponChg, Is_Public_Issued, multiValuation, valEndDate, Fix_Type):
+def generate_result(bonddata, imonth, Model, Period, isDomestic, OptionType, Rating, PDiR, TimeToMaturity, CouponChg, Is_Public_Issued, multiValuation, valEndDate, Fix_Type):
 
     itype = ['All']
     if 'All' not in Model:
@@ -110,38 +113,54 @@ def generate_result(bonddata, Model, Period, isDomestic, OptionType, Rating, PDi
     cut_b.columns = [''.join(col) for col in cut_b.columns]
 
     tmp = bonddata[itype + ['yearmonth', 'Yield', 'bondID', 'YYYYMMDD', 'valEndDate']].merge(cut_b, on = itype + ['yearmonth'], how = 'left')
+    cut_b = []
     tmp['Q25'] = tmp['Yield'] - tmp['Yieldq25']
     tmp['Q50'] = tmp['Yield'] - tmp['Yieldq50']
     tmp['Q75'] = tmp['Yield'] - tmp['Yieldq75']
 
     tmp['Flag'] = (tmp[['Q25', 'Q50', 'Q75']]>0).sum(axis = 1)
     tmp = tmp[itype + ['yearmonth', 'Flag', 'bondID', 'YYYYMMDD','valEndDate', 'Yield']]
-
-    tmp = tmp.merge(bonddata[['multiValuation', 'bondID','YYYYMMDD','M_later', 'valEndDate', 'Rating', 'PDiR']].rename(columns = {'Rating':'Rating1', 'PDiR':'PDiR1', 'multiValuation': 'multiValuation1'}), how = 'left', on = ['bondID','YYYYMMDD', 'valEndDate'])
     # tmp = tmp.merge(bonddata[itype+ ['bondID','YYYYMMDD', 'valEndDate']], how = 'left', on = ['bondID','YYYYMMDD', 'valEndDate']+itype)
+    num_orig = tmp[itype + ['Yield', 'Flag']].groupby(itype + ['Flag']).count().reset_index().rename(columns = {'Yield': 'Original_Obs', 'Flag':'Type'})
+    num_orig.loc[num_orig['Type']==0, 'Type'] = '<Q25'
+    num_orig.loc[num_orig['Type']==1, 'Type'] = 'Q25_Q50'
+    num_orig.loc[num_orig['Type']==2, 'Type'] = 'Q50_Q75'
+    num_orig.loc[num_orig['Type']==3, 'Type'] = '>Q75'
+    print(num_orig)
 
-    tmp1 = tmp.loc[~tmp.multiValuation1, itype + ['bondID','yearmonth', 'M_later', 'valEndDate', 'Rating1', 'PDiR1', 'Flag', 'Yield']].merge(tmp.loc[~tmp.multiValuation1,['bondID', 'yearmonth', 'Rating1', 'PDiR1', 'Flag']].rename(columns = {'yearmonth':'M_later'}), on = ['bondID', 'M_later'], how = 'inner')
-    tmp2 = tmp.loc[tmp.multiValuation1, itype + [ 'bondID','yearmonth', 'M_later', 'valEndDate', 'Rating1', 'PDiR1' , 'Flag', 'Yield']].merge(tmp.loc[tmp.multiValuation1,['bondID', 'yearmonth', 'valEndDate', 'Rating1', 'PDiR1', 'Flag']].rename(columns = {'yearmonth':'M_later'}), on = ['bondID', 'M_later', 'valEndDate'], how = 'inner')
-    tmp_df = pd.concat([tmp1, tmp2], axis = 0)
+    tmp = tmp.merge(bonddata[['multiValuation', 'bondID','YYYYMMDD',f'{imonth}M_later', 'valEndDate', 'Rating', 'PDiR']].rename(columns = {'Rating':'Rating1', 'PDiR':'PDiR1', 'multiValuation': 'multiValuation1'}), how = 'left', on = ['bondID','YYYYMMDD', 'valEndDate'])
 
-    df = tmp_df.groupby(itype).apply(lambda x: generate_type_matrix(x, Fix_Type)).reset_index()
+
+    tmp1 = tmp.loc[~tmp.multiValuation1, itype + ['bondID','yearmonth', f'{imonth}M_later', 'valEndDate', 'Rating1', 'PDiR1', 'Flag', 'Yield']].merge(tmp.loc[~tmp.multiValuation1,['bondID', 'yearmonth', 'Rating1', 'PDiR1', 'Flag']].rename(columns = {'yearmonth':f'{imonth}M_later'}), on = ['bondID', f'{imonth}M_later'], how = 'inner')
+    tmp2 = tmp.loc[tmp.multiValuation1, itype + [ 'bondID','yearmonth', f'{imonth}M_later', 'valEndDate', 'Rating1', 'PDiR1' , 'Flag', 'Yield']].merge(tmp.loc[tmp.multiValuation1,['bondID', 'yearmonth', 'valEndDate', 'Rating1', 'PDiR1', 'Flag']].rename(columns = {'yearmonth':f'{imonth}M_later'}), on = ['bondID', f'{imonth}M_later', 'valEndDate'], how = 'inner')
+    tmp = pd.concat([tmp1, tmp2], axis = 0)
+
+    df = tmp.groupby(itype).apply(lambda x: generate_type_matrix(x, Fix_Type)).reset_index()
+    df = df.merge(num_orig, on = itype + ['Type'], how = 'left')
+
 
     st.dataframe(df)
     gc.collect()
 
 @st.cache
-def get_bonddata(imonth):
+def get_bonddata():
     bonddata = pd.DataFrame()
     for i in range(11):
         print(i)
-        tmp = pd.read_csv('bonddata{}.csv'.format(i))
+        tmp = pd.read_parquet(r'E:\Mengqi\bonds_analysis\bonddata{}.parquet.gzip'.format(i))
+        # tmp = pd.read_csv(r'E:\Mengqi\bonds_analysis\bonddata{}.csv'.format(i))
+        # tmp["YYYYMMDD"] = pd.to_datetime(tmp["YYYYMMDD"])
+        # for j in [3, 6, 12]:
+        #     tmp[f'{j}M_later'] = tmp["YYYYMMDD"].apply(lambda x: (x + relativedelta.relativedelta(months = j)).strftime('%Y%m') )
+        #     tmp[f'{j}M_later'] = tmp[f'{j}M_later'].apply(lambda x: int(x))
+        # tmp.to_parquet(r'E:\Mengqi\bonds_analysis\bonddata{}.parquet.gzip'.format(i),
+        #     compression='gzip')  
+
         bonddata = pd.concat([bonddata, tmp], axis = 0)
     bonddata = bonddata.reset_index(drop = True)
-    bonddata["YYYYMMDD"] = pd.to_datetime(bonddata["YYYYMMDD"])
-    bonddata['M_later'] = bonddata["YYYYMMDD"].apply(lambda x: (x + relativedelta.relativedelta(months = imonth[0])).strftime('%Y%m') )
-    bonddata['M_later'] = bonddata["M_later"].apply(lambda x: int(x))
+
     list_fill = ['OptionType', 'isDomestic', 'Model', 'PDiR', 'Rating', 'TimeToMaturity', 'All', 'Period' , 'CouponChg', 'Is_Public_Issued', 'multiValuation', 'valEndDate>Maturity']
-    bonddata[list_fill] = bonddata[list_fill].fillna('All')
+    bonddata[list_fill] = bonddata[list_fill].fillna('N/A')
     return bonddata
 
 
@@ -166,6 +185,7 @@ st.write("Bond Analysis")
 # df['Yield'] = [1,2,3,4,5,6]
 st.sidebar.title("Please select the category")
 imonth = st.sidebar.multiselect('choose the Month',options = [3,6,12], default=[3]) 
+imonth = imonth[0]
 # Model = st.sidebar.multiselect('choose the Model',options = list(bonddata['Model'].unique())+['All'], default=['All'])
 Model = st.sidebar.multiselect('choose the Period',options = ['CORP', 'LGFV', 'FINA', 'N/A', 'All'], default=['All'])
 Period = st.sidebar.multiselect('choose the Period',options = ['Before2018', 'After2018', 'All'], default=['All'])
@@ -182,10 +202,10 @@ valEndDate = st.sidebar.multiselect('choose the valEndDate>Maturity',options = [
 
 Fix_Type = st.sidebar.multiselect('choose the Fix_Type',options = ['Rating&PDiR', 'Rating', 'PDiR', 'All'], default=['Rating&PDiR'])
 run = st.sidebar.button('Run')
-bonddata = get_bonddata(imonth)
+bonddata = get_bonddata()
 if run:
     print(bonddata.columns)
-    generate_result(bonddata, Model, Period, isDomestic, OptionType, Rating, PDiR, TimeToMaturity, CouponChg, Is_Public_Issued, multiValuation, valEndDate, Fix_Type)
+    generate_result(bonddata, imonth, Model, Period, isDomestic, OptionType, Rating, PDiR, TimeToMaturity, CouponChg, Is_Public_Issued, multiValuation, valEndDate, Fix_Type)
 
 
 
