@@ -147,7 +147,7 @@ def get_bonddata():
     bonddata = pd.DataFrame()
     for i in range(11):
         print(i)
-        tmp = pd.read_parquet(r'E:\Mengqi\bonds_analysis\bonddata{}.parquet.gzip'.format(i))
+        tmp = pd.read_parquet('bonddata{}.parquet.gzip'.format(i))
         # tmp = pd.read_csv(r'E:\Mengqi\bonds_analysis\bonddata{}.csv'.format(i))
         # tmp["YYYYMMDD"] = pd.to_datetime(tmp["YYYYMMDD"])
         # for j in [3, 6, 12]:
