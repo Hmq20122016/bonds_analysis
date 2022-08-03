@@ -10,7 +10,10 @@ import math
 import seaborn as sns
 #streamlit run E:\Mengqi\Streamlit\Bonds.py
 #streamlit run E:\Mengqi\Streamlit\Bonds.py
+PAGE_CONFIG = {"page_title": "Hello",
+               "page_icon": ":smiley:", "layout": "centered"}
 
+st.set_page_config(**PAGE_CONFIG)
 
 def remove_0(x, y):
     if y == 0:
@@ -69,7 +72,9 @@ def cal_matrix_num(tmp_df, col):
         for j in range(4):
             aa = tmp_df[(tmp_df.Flag_x==i)&(tmp_df.Flag_y==j)]
             num_obs = num_obs + aa.shape[0]
-            df.iloc[i,j] = "{rate:.1f}% ({num:.0f}, {std:.4f})".format(rate = remove_0(aa.shape[0]*100, total_num), num = aa.shape[0], std = aa[col].std())
+        for j in range(4):
+            aa = tmp_df[(tmp_df.Flag_x==i)&(tmp_df.Flag_y==j)]
+            df.iloc[i,j] = "{rate:.1f}% ({num:.0f}, {std:.4f})".format(rate = remove_0(aa.shape[0]*100, num_obs), num = aa.shape[0], std = aa[col].std())
         df.iloc[i,4] = num_obs
     return df
 
@@ -304,7 +309,7 @@ st.write("Bond Analysis")
 
 
 st.sidebar.title("Please select the category")
-run = st.sidebar.button('Click and Run')
+run = st.sidebar.button('Click and Run', help = 'If you finish selection below, please click run button')
 col = st.sidebar.radio('Choose the values',options = ['Yield', 'GS', 'ZS'])
 if col == 'ZS':
     col = 'Spread'
@@ -315,14 +320,14 @@ Model = st.sidebar.multiselect('Choose the Model',options = ['CORP', 'LGFV', 'FI
 Period = st.sidebar.multiselect('Choose the Period',options = ['Before2018', 'After2018', 'All'], default=['All'])
 isDomestic = st.sidebar.multiselect('Choose the isDomestic',options = ['Domestic', 'NonDomestic','All'], default=['All'])
 OptionType = st.sidebar.multiselect('Choose the OptionType',options = ['Vanilla', 'Others', 'Puttable', 'Callable', 'Callable&Puttable', 'All'], default=['All'])
-Rating = st.sidebar.multiselect('Choose the Rating',options = ['A_andBetter', 'N/A', 'BBB', 'B_andWorse', 'BB', 'All'], default=['All'])
-PDiR = st.sidebar.multiselect('Choose the PDiR',options = ['A_andBetter', 'BBB', 'BB', 'B_andWorse', 'N/A', 'All'], default=['All'])
+Rating = st.sidebar.multiselect('Choose the Rating',options = ['A_andBetter', 'N/A', 'BBB', 'B_andWorse', 'BB', 'All'], default=['All'], help = 'This is the external rating from S&P, Moody, Fitch')
+PDiR = st.sidebar.multiselect('Choose the PDiR',options = ['A_andBetter', 'BBB', 'BB', 'B_andWorse', 'N/A', 'All'], default=['All'], help = 'This is PDiR from irap China')
 TimeToMaturity = st.sidebar.multiselect('Choose the TimeToMaturity',options = ['4To12M', 'LessThan3M', '1-3Y', '3-5Y', 'MoreThan5Y', 'N/A', 'All'], default=['All'])
 
-CouponChg = st.sidebar.multiselect('Choose the CouponChg',options = ['N/A', 'Change', 'All'], default=['All'])
-Is_Public_Issued = st.sidebar.multiselect('Choose the Is_Public_Issued',options = [True, False, 'All'], default=['All'])
-multiValuation = st.sidebar.multiselect('Choose the multiValuation',options = [False, True, 'All'], default=['All'])
-valEndDate = st.sidebar.multiselect('Choose the valEndDate>Maturity',options = [False, True, 'All'], default=['All'])
+CouponChg = st.sidebar.multiselect('Choose the CouponChg',options = ['N/A', 'Change', 'All'], default=['All'], help = 'Whether issuers have the right to change the coupon rate')
+Is_Public_Issued = st.sidebar.multiselect('Choose the Is_Public_Issued',options = [True, False, 'All'], default=['All'], help = 'Whether the bonds are public issued')
+multiValuation = st.sidebar.multiselect('Choose the multiValuation',options = [False, True, 'All'], default=['All'], help = 'Whether the bonds has multiple valuation on same date')
+valEndDate = st.sidebar.multiselect('Choose the valEndDate>Maturity',options = [False, True, 'All'], default=['All'], help = 'Whether the valEndDate of bonds are larger than Maturity date')
 
 Fix_Type = st.sidebar.multiselect('Choose the Fix_Type',options = ['Rating&PDiR', 'Rating', 'PDiR', 'All'], default=['Rating&PDiR'])
 
